@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🌻 Feliz Día de las Flores Amarillas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Dancing+Script:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: radial-gradient(ellipse at 50% 40%, #f8f9f4 0%, #eceee5 100%);
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+
+  #msg {
+    position: fixed;
+    color: #2a1c0c;
+    font-family: 'Cormorant SC', 'Cormorant Garamond', Georgia, serif;
+    font-weight: 700;
+    font-variant-caps: small-caps;
+    letter-spacing: .02em;
+    line-height: 1.3;
+    pointer-events: none;
+  }
+  #msg h1 { font-size: 1.12em; margin: 0 0 .9em; font-weight: 700; line-height: 1.25; text-wrap: balance; }
+  #msg p  { margin: 0; white-space: pre-line; }
+  #msg #s { padding-left: 6em; margin-top: .2em; }
+
+  #ph {
+    position: fixed;
+    color: #1d1409;
+    font-family: 'Dancing Script', 'Brush Script MT', cursive;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="msg"><h1 id="t"></h1><p id="b"></p><p id="s"></p></div>
+<div id="ph"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================== TEXTOS (edítalos a tu gusto) ================== */
+const CONFIG = {
+  title:  '🌻 Feliz Día de las Flores Amarillas Mi Querida Roxana 🌻',
+  body:   'Cada girasol que ves aquí es un latido de mi corazón.\nAsí como el sol ilumina los campos, tú iluminas mi vida Roxana se que estamos pasando por un momento mal pero quiero que entiendas que yo realmente te amo eres lo mejor que me paso y yo quiero una vida con tigo.\nQue estas flores te recuerden lo especial que eres para mí nunca olvides mi amor todo lo hago por ti y lo hare siempre para ti, tu eres el amor de mi vida roxana te lo escribo y lo hago con todo el amor que tengo por ti porfavor estemos bien AMOR con todo el amor y llorando hize esto se que es poco talves pero yo te amo entiende eso porfavor amor.',
+  sign:   '- ¡TE AMO!',
+  phrase: 'Eres el sol que hace florecer cada uno de mis días porfavor perdoname quiero que construyamos una vida juntos sin ti nose que seria de mi vida. ✨',
+  flowers: 320          // cantidad de girasoles en el corazón
+};
+
+/* ================== utilidades ================== */
+const $ = id => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOutQuad  = t => 1 - (1 - t) * (1 - t);
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+const easeInOut    = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const easeOutBack  = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const cv = $('c'), ctx = cv.getContext('2d');
+const msg = $('msg'), phEl = $('ph');
+
+const K = 0.44;          // escala del corazón (en unidades de árbol)
+const TIP = 0.16;        // altura de la punta del corazón sobre el suelo
+const R_U = 0.04;        // radio de cada girasol (en unidades de árbol)
+const TREE_COL = '#0e6b5c';
+const BLOOM_DUR = 3.2;
+
+let W, H, DPR, S, L;
+let sprites = [];
+const branches = [];
+let flowers = [];
+let fallers = [];
+let G = 0;
+let started = false, t0 = 0, lastNow = 0, nextFall = 0;
+let T_TREE = 1.9, T_BLOOM, T_MOVE, T_TEXT, T_FALLON;
+let segs = [];
+
+/* ================== corazón ================== */
+function inHeart(x, y) { const a = x * x + y * y - 1; return a * a * a - x * x * y * y * y <= 0; }
+
+/* ================== girasol (sprite) ================== */
+function sunflower(g, cx, cy, R, v) {
+  const c0 = ['#f0a316', '#f4a91c', '#ec9a12', '#f2a020'][v % 4];
+  const c1 = ['#ffc82e', '#ffd23c', '#fdc124', '#ffcc33'][v % 4];
+  const n = 26;
+  [[R, c0, 0], [R * 0.86, c1, Math.PI / n]].forEach(([len, col, off]) => {
+    for (let i = 0; i < n; i++) {
+      g.save();
+      g.translate(cx, cy);
+      g.rotate(off + i * 2 * Math.PI / n);
+      g.beginPath();
+      g.moveTo(len * 0.25, 0);
+      g.quadraticCurveTo(len * 0.62, -len * 0.2, len, 0);
+      g.quadraticCurveTo(len * 0.62, len * 0.2, len * 0.25, 0);
+      g.fillStyle = col;
+      g.fill();
+      g.restore();
+    }
+  });
+  let gr = g.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 0.7);
+  gr.addColorStop(0, 'rgba(255,214,60,.9)');
+  gr.addColorStop(1, 'rgba(255,190,30,0)');
+  g.fillStyle = gr;
+  g.beginPath(); g.arc(cx, cy, R * 0.7, 0, 7); g.fill();
+
+  gr = g.createRadialGradient(cx - R * 0.08, cy - R * 0.08, R * 0.03, cx, cy, R * 0.38);
+  gr.addColorStop(0, '#6b3312');
+  gr.addColorStop(1, '#241008');
+  g.fillStyle = gr;
+  g.beginPath(); g.arc(cx, cy, R * 0.36, 0, 7); g.fill();
+
+  if (R > 14) {
+    g.fillStyle = 'rgba(150,80,30,.55)';
+    for (let i = 1; i <= 46; i++) {
+      const rr = R * 0.34 * Math.sqrt(i / 46), a = i * 2.39996;
+      g.beginPath();
+      g.arc(cx + rr * Math.cos(a), cy + rr * Math.sin(a), R * 0.028, 0, 7);
+      g.fill();
+    }
+  }
+}
+
+function buildSprites() {
+  const r = R_U * S;
+  const px = Math.ceil(r * 2.3 * DPR);
+  sprites = [];
+  for (let v = 0; v < 4; v++) {
+    const c = document.createElement('canvas');
+    c.width = c.height = px;
+    sunflower(c.getContext('2d'), px / 2, px / 2, px * 0.46, v);
+    sprites.push(c);
+  }
+}
+
+/* ================== árbol ================== */
+function branchPoint(b, t) {
+  const dx = Math.cos(b.ang), dy = Math.sin(b.ang);
+  const off = b.curve * b.len * t * t;
+  return [b.x + dx * b.len * t - dy * off, b.y + dy * b.len * t + dx * off];
+}
+function mk(x, y, ang, len, w, depth, start) {
+  const b = { x, y, ang, len, w, depth, start, dur: 0.35 + len * 2.6, curve: (Math.random() - .5) * 0.5, leaf: false };
+  branches.push(b);
+  return b;
+}
+function endIn(x, y, ang, len) {
+  const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len;
+  const hx = ex / K, hy = (-ey - TIP) / K - 1;
+  return inHeart(hx / 0.88, hy / 0.88);
+}
+function spawn(p, pf, dAng, lf, stub) {
+  const tf = pf === 1 ? 0.85 : pf;
+  const [sx, sy] = branchPoint(p, pf);
+  const depth = p.depth + 1, len = p.len * lf;
+  for (let i = 0; i < 6; i++) {
+    const ang = p.ang + dAng + (Math.random() - .5) * 0.5 * (i + 1) / 2;
+    if (depth >= 2 && !endIn(sx, sy, ang, len)) continue;
+    const c = mk(sx, sy, ang, len, Math.max(0.014, p.w * (1 - 0.6 * pf) * 0.9), depth, p.start + p.dur * tf);
+    if (stub) c.leaf = true;
+    grow(c);
+    return;
+  }
+}
+function grow(b) {
+  if (b.depth >= 3 || b.leaf) return;
+  if (b.depth === 0) {
+    spawn(b, .34, -1.05, .3, true);
+    spawn(b, .55, 1.1, .28, true);
+    spawn(b, 1, -0.75, .8, false);
+    spawn(b, 1, 0.05, .85, false);
+    spawn(b, 1, 0.75, .8, false);
+    return;
+  }
+  const ends = b.depth < 2 ? [-0.65, 0.05, 0.65] : [-0.5, 0.5];
+  ends.forEach(a => spawn(b, 1, a, 0.8, false));
+  if (b.depth < 2) spawn(b, 0.55, (Math.random() < .5 ? -1 : 1) * 0.85, 0.6, false);
+}
+function buildTree() {
+  branches.length = 0;
+  const trunk = mk(0, 0.004, -Math.PI / 2, 0.36, 0.07, 0, 0);
+  grow(trunk);
+  G = 0;
+  branches.forEach(b => { G = Math.max(G, b.start + b.dur); });
+}
+
+function drawTree(tt) {
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = TREE_COL;
+  for (const b of branches) {
+    if (tt <= b.start) continue;
+    const g = clamp((tt - b.start) / b.dur);
+    const eg = easeOutQuad(g);
+    const n = Math.max(6, Math.ceil(b.len * 60 * eg));
+    let [x0, y0] = branchPoint(b, 0);
+    for (let i = 1; i <= n; i++) {
+      const t = eg * i / n;
+      const [x1, y1] = branchPoint(b, t);
+      ctx.lineWidth = Math.max(3, b.w * S * (1 - 0.6 * t));
+      ctx.beginPath();
+      ctx.moveTo(x0 * S, y0 * S);
+      ctx.lineTo(x1 * S, y1 * S);
+      ctx.stroke();
+      x0 = x1; y0 = y1;
+    }
+  }
+}
+
+/* ================== girasoles del corazón ================== */
+function buildFlowers() {
+  flowers = [];
+  let tries = 0;
+  const MIN = 0.033;
+  while (flowers.length < CONFIG.flowers && tries < 80000) {
+    tries++;
+    const hx = Math.random() * 2.5 - 1.25, hy = Math.random() * 2.4 - 1.15;
+    if (!inHeart(hx * 0.985, hy * 0.985)) continue;
+    const x = hx * K, y = -(TIP + (hy + 1) * K);
+    let ok = true;
+    for (const f of flowers) {
+      if ((f.x - x) * (f.x - x) + (f.y - y) * (f.y - y) < MIN * MIN) { ok = false; break; }
+    }
+    if (ok) flowers.push({
+      x, y,
+      rot: Math.random() * 6.283,
+      spin: (Math.random() - .5) * 0.5,
+      v: (Math.random() * 4) | 0,
+      sz: 0.85 + Math.random() * 0.3,
+      ph: Math.random() * 6.28
+    });
+  }
+  flowers.forEach(f => { f.d = Math.hypot(f.x, f.y + 0.4); });
+  const mx = Math.max(...flowers.map(f => f.d));
+  flowers.forEach(f => { f.at = T_BLOOM + (f.d / mx) * BLOOM_DUR * 0.85 + Math.random() * 0.4; });
+  flowers.sort((a, b) => a.y - b.y);
+}
+
+/* ================== texto (máquina de escribir) ================== */
+function typeSeg(sg, t) {
+  const n = Math.max(0, Math.min(sg.chars.length, Math.floor((t - sg.start) / 0.032)));
+  if (n === sg.n) return;
+  sg.n = n;
+  sg.el.innerHTML = esc(sg.chars.slice(0, n).join('')) +
+    '<span style="visibility:hidden">' + esc(sg.chars.slice(n).join('')) + '</span>';
+}
+function initSegs() {
+  segs = [
+    { el: $('t'), text: CONFIG.title },
+    { el: $('b'), text: CONFIG.body },
+    { el: $('s'), text: CONFIG.sign },
+    { el: phEl,   text: CONFIG.phrase }
+  ];
+  segs.forEach(s => { s.chars = Array.from(s.text); s.n = -1; s.start = Infinity; });
+}
+function scheduleSegs() {
+  let t = T_TEXT;
+  segs.forEach(s => {
+    s.start = t;
+    t += s.chars.length * 0.032 + 0.3;
+  });
+}
+
+/* ================== layout ================== */
+function placeText() {
+  if (!L) return;
+  const fs = L.fs;
+  if (L.desk) {
+    msg.style.left = (W * 0.07) + 'px';
+    msg.style.top = (H * 0.13) + 'px';
+    msg.style.width = Math.min(W * 0.38, 560) + 'px';
+    phEl.style.left = (W * 0.07) + 'px';
+    phEl.style.top = (L.gy1 - fs * 2.7) + 'px';
+  } else {
+    msg.style.left = (W * 0.07) + 'px';
+    msg.style.top = (L.gy1 + 22) + 'px';
+    msg.style.width = (W * 0.86) + 'px';
+    phEl.style.left = (W * 0.07) + 'px';
+    phEl.style.top = (msg.getBoundingClientRect().bottom + 6) + 'px';
+  }
+  msg.style.fontSize = fs + 'px';
+  phEl.style.fontSize = (fs * 0.95) + 'px';
+}
+function layout() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  const desk = W >= 820 && W > H * 1.05;
+  if (desk) {
+    S = Math.min(H * 0.58, W * 0.46);
+    L = { desk, gy1: H * 0.86, gy0: H * 0.86, fx: W * 0.70 };
+    L.fs = clamp(Math.min(W * 0.019, H * 0.034), 16, 30);
+  } else {
+    S = Math.min(W * 0.86, H * 0.40);
+    const g1 = 18 + S * 1.16;
+    L = { desk, gy1: g1, gy0: Math.max(H * 0.8, g1), fx: W / 2 };
+    L.fs = clamp(W * 0.05, 16, 24);
+  }
+  buildSprites();
+  placeText();
+  fallers = [];
+}
+
+/* ================== bucle principal ================== */
+function flowerSpot() { return { x: W / 2, y: H * 0.5, R: Math.min(58, Math.max(40, W * 0.05)) }; }
+
+function drawIntro(now) {
+  const p = flowerSpot();
+  const pulse = 1 + 0.03 * Math.sin(now * 3);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.save();
+  ctx.rotate(now * 0.15);
+  ctx.scale(pulse, pulse);
+  sunflower(ctx, 0, 0, p.R, 0);
+  ctx.restore();
+  const k = p.R / 55;
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(3 * k, 3 * k);
+  ctx.lineTo(24 * k, 20 * k);
+  ctx.lineTo(86 * k, 20 * k);
+  ctx.stroke();
+  ctx.fillStyle = '#111';
+  ctx.font = (13 * k) + 'px Arial, Helvetica, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Click Aquí', 44 * k, 14 * k);
+  ctx.restore();
+}
+
+function updateFall(dt, t, treeX, gy) {
+  if (t > T_FALLON && t > nextFall && fallers.length < 28 && flowers.length) {
+    const f = flowers[(Math.random() * flowers.length) | 0];
+    fallers.push({
+      x: treeX + f.x * S, y: gy + f.y * S, vy: 10 + Math.random() * 20,
+      ph: Math.random() * 6.28, rot: Math.random() * 6.28, vr: (Math.random() - .5) * 2,
+      size: R_U * S * (0.55 + Math.random() * 0.35), v: (Math.random() * 4) | 0, land: false, rest: 0
+    });
+    nextFall = t + 0.35 + Math.random() * 0.6;
+  }
+  for (const o of fallers) {
+    if (!o.land) {
+      o.vy = Math.min(90, o.vy + 40 * dt);
+      o.y += o.vy * dt;
+      o.x += Math.sin(t * 2 + o.ph) * 18 * dt;
+      o.rot += o.vr * dt;
+      if (o.y >= gy - o.size * 0.4) { o.y = gy - o.size * 0.4; o.land = true; }
+    } else {
+      o.rest += dt;
+    }
+  }
+  fallers = fallers.filter(o => o.rest < 9);
+}
+
+function frame(ts) {
+  requestAnimationFrame(frame);
+  const now = ts / 1000;
+  const dt = Math.min(0.05, now - lastNow || 0.016);
+  lastNow = now;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  if (!started) { drawIntro(now); return; }
+
+  const t = Math.max(0, now - t0);
+  const m = easeInOut(clamp((t - T_MOVE) / 1.4));
+  const treeX = lerp(W / 2, L.fx, m);
+  const gy = lerp(L.gy0, L.gy1, m);
+
+  // suelo
+  if (t > 0.2) {
+    const half = W * 0.46 * easeOutCubic(clamp((t - 0.2) / 1.6));
+    ctx.strokeStyle = '#151515';
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - half, gy);
+    ctx.lineTo(W / 2 + half, gy);
+    ctx.stroke();
+  }
+
+  // flor inicial que se desvanece
+  const fo = clamp(t / 0.5);
+  if (fo < 1) {
+    const p = flowerSpot();
+    ctx.save();
+    ctx.globalAlpha = 1 - fo;
+    ctx.translate(p.x, p.y);
+    const sc = 1 + 0.2 * fo;
+    ctx.scale(sc, sc);
+    sunflower(ctx, 0, 0, p.R, 0);
+    ctx.restore();
+  }
+
+  // semilla
+  const sk = 1 - clamp((t - 1.55) / 0.4);
+  if (sk > 0) {
+    const p = flowerSpot();
+    const R = 8;
+    const u = clamp((t - 0.35) / 1.2);
+    const yEnd = gy - R;
+    const y = lerp(p.y, yEnd, u * u);
+    ctx.save();
+    ctx.globalAlpha = clamp(t / 0.4);
+    ctx.fillStyle = '#8f2a24';
+    ctx.beginPath();
+    ctx.arc(W / 2, y + (1 - sk) * R * 0.6, R * sk, 0, 7);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // árbol
+  ctx.save();
+  ctx.translate(treeX, gy);
+  drawTree(t - T_TREE);
+  ctx.restore();
+
+  // girasoles
+  if (t > T_BLOOM) {
+    const base = R_U * S * 2.3;
+    for (const f of flowers) {
+      const tf = t - f.at;
+      if (tf <= 0) continue;
+      const s = easeOutBack(clamp(tf / 0.55));
+      const size = base * s * f.sz * (1 + 0.03 * Math.sin(t * 1.5 + f.ph));
+      ctx.save();
+      ctx.translate(treeX + f.x * S, gy + f.y * S);
+      ctx.rotate(f.rot + f.spin * t);
+      ctx.drawImage(sprites[f.v], -size / 2, -size / 2, size, size);
+      ctx.restore();
+    }
+  }
+
+  // flores cayendo
+  updateFall(dt, t, treeX, gy);
+  for (const o of fallers) {
+    const size = o.size * 2.3;
+    ctx.save();
+    ctx.globalAlpha = o.land ? clamp((9 - o.rest) / 3) : 1;
+    ctx.translate(o.x, o.y);
+    ctx.rotate(o.rot);
+    ctx.drawImage(sprites[o.v], -size / 2, -size / 2, size, size);
+    ctx.restore();
+  }
+
+  // texto
+  const tt = t;
+  for (const sg of segs) typeSeg(sg, tt);
+}
+
+/* ================== eventos ================== */
+cv.addEventListener('pointerdown', e => {
+  if (started) return;
+  const p = flowerSpot();
+  if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < p.R * 1.6) {
+    started = true;
+    t0 = performance.now() / 1000;
+  }
+});
+cv.addEventListener('pointermove', e => {
+  if (started) { cv.style.cursor = 'default'; return; }
+  const p = flowerSpot();
+  cv.style.cursor = Math.hypot(e.clientX - p.x, e.clientY - p.y) < p.R * 1.6 ? 'pointer' : 'default';
+});
+window.addEventListener('resize', layout);
+
+/* ================== inicio ================== */
+initSegs();
+layout();
+buildTree();
+T_BLOOM = T_TREE + G * 0.88;
+T_MOVE = T_BLOOM + 2.7;
+T_TEXT = T_MOVE + 0.7;
+T_FALLON = T_MOVE + 1.5;
+buildFlowers();
+scheduleSegs();
+segs.forEach(sg => typeSeg(sg, -1));
+placeText();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(placeText);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

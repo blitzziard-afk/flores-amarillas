@@ -15,7 +15,7 @@
   }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
 
-  #msg {
+    #msg {
     position: fixed;
     color: #2a1c0c;
     font-family: 'Cormorant SC', 'Cormorant Garamond', Georgia, serif;
@@ -23,8 +23,20 @@
     font-variant-caps: small-caps;
     letter-spacing: .02em;
     line-height: 1.3;
-    pointer-events: none;
+    box-sizing: border-box;
+    padding-right: 10px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    pointer-events: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(200, 140, 20, .6) transparent;
   }
+
+  #msg::-webkit-scrollbar { width: 6px; }
+  #msg::-webkit-scrollbar-thumb { background: rgba(200, 140, 20, .6); border-radius: 3px; }
+  #msg::-webkit-scrollbar-track { background: transparent; }
+  
   #msg h1 { font-size: 1.12em; margin: 0 0 .9em; font-weight: 700; line-height: 1.25; text-wrap: balance; }
   #msg p  { margin: 0; white-space: pre-line; }
   #msg #s { padding-left: 6em; margin-top: .2em; }
@@ -274,21 +286,26 @@ function scheduleSegs() {
 function placeText() {
   if (!L) return;
   const fs = L.fs;
+  msg.style.fontSize = fs + 'px';
+  phEl.style.fontSize = (fs * 0.95) + 'px';
   if (L.desk) {
+    const top = H * 0.13;
+    const phTop = L.gy1 - fs * 2.7;
     msg.style.left = (W * 0.07) + 'px';
-    msg.style.top = (H * 0.13) + 'px';
+    msg.style.top = top + 'px';
     msg.style.width = Math.min(W * 0.38, 560) + 'px';
+    msg.style.maxHeight = Math.max(80, phTop - top - fs * 0.8) + 'px';
     phEl.style.left = (W * 0.07) + 'px';
-    phEl.style.top = (L.gy1 - fs * 2.7) + 'px';
+    phEl.style.top = phTop + 'px';
   } else {
+    const top = L.gy1 + 22;
     msg.style.left = (W * 0.07) + 'px';
-    msg.style.top = (L.gy1 + 22) + 'px';
+    msg.style.top = top + 'px';
     msg.style.width = (W * 0.86) + 'px';
+    msg.style.maxHeight = Math.max(80, H - top - fs * 3.2) + 'px';
     phEl.style.left = (W * 0.07) + 'px';
     phEl.style.top = (msg.getBoundingClientRect().bottom + 6) + 'px';
   }
-  msg.style.fontSize = fs + 'px';
-  phEl.style.fontSize = (fs * 0.95) + 'px';
 }
 function layout() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);

@@ -31,6 +31,7 @@
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     scrollbar-color: rgba(200, 140, 20, .6) transparent;
+    touch-action: pan-y;
   }
 
   #msg::-webkit-scrollbar { width: 6px; }
@@ -41,12 +42,14 @@
   #msg p  { margin: 0; white-space: pre-line; }
   #msg #s { padding-left: 6em; margin-top: .2em; }
 
-  #ph {
+    #ph {
     position: fixed;
     color: #1d1409;
     font-family: 'Dancing Script', 'Brush Script MT', cursive;
     font-weight: 600;
-    white-space: nowrap;
+    line-height: 1.25;
+    white-space: normal;
+    box-sizing: border-box;
     pointer-events: none;
   }
 </style>
@@ -288,23 +291,27 @@ function placeText() {
   const fs = L.fs;
   msg.style.fontSize = fs + 'px';
   phEl.style.fontSize = (fs * 0.95) + 'px';
+
+  const left = W * 0.07;
+  const width = L.desk ? Math.min(W * 0.38, 560) : W * 0.86;
+  msg.style.left = left + 'px';
+  msg.style.width = width + 'px';
+  phEl.style.left = left + 'px';
+  phEl.style.width = width + 'px';
+
+  const phH = phEl.offsetHeight;
+
   if (L.desk) {
     const top = H * 0.13;
-    const phTop = L.gy1 - fs * 2.7;
-    msg.style.left = (W * 0.07) + 'px';
+    const phTop = L.gy1 - 12 - phH;
     msg.style.top = top + 'px';
-    msg.style.width = Math.min(W * 0.38, 560) + 'px';
-    msg.style.maxHeight = Math.max(80, phTop - top - fs * 0.8) + 'px';
-    phEl.style.left = (W * 0.07) + 'px';
+    msg.style.maxHeight = Math.max(80, phTop - top - 12) + 'px';
     phEl.style.top = phTop + 'px';
   } else {
     const top = L.gy1 + 22;
-    msg.style.left = (W * 0.07) + 'px';
     msg.style.top = top + 'px';
-    msg.style.width = (W * 0.86) + 'px';
-    msg.style.maxHeight = Math.max(80, H - top - fs * 3.2) + 'px';
-    phEl.style.left = (W * 0.07) + 'px';
-    phEl.style.top = (msg.getBoundingClientRect().bottom + 6) + 'px';
+    msg.style.maxHeight = Math.max(80, H - top - phH - 20) + 'px';
+    phEl.style.top = (msg.getBoundingClientRect().bottom + 8) + 'px';
   }
 }
 function layout() {
